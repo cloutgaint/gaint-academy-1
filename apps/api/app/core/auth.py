@@ -1,6 +1,5 @@
 import hashlib
 import secrets
-from datetime import timedelta
 from fastapi import Cookie, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,3 +26,14 @@ def current_user(session_token:str|None=Cookie(default=None,alias=SESSION_COOKIE
 def permission_codes(db:Session,user:User)->list[str]:
     rows=db.execute(select(Permission.code).join(RolePermission,RolePermission.permission_id==Permission.id).join(Role,Role.id==RolePermission.role_id).join(UserRole,UserRole.role_id==Role.id).where(UserRole.user_id==user.id,UserRole.tenant_id==user.tenant_id)).scalars().all()
     return sorted(set(rows))
+
+def role_codes(db:Session,user:User)->list[str]:
+    rows=db.execute(select(Role.code).join(UserRole,UserRole.role_id==Role.id).where(UserRole.user_id==user.id,UserRole.tenant_id==user.tenant_id,Role.tenant_id==user.tenant_id)).scalars().all()
+    return sorted(set(rows))
+
+def role_scopes(db:Session,user:User)->list[dict[str,str|None]]:
+    rows=db.execute(select(Role.code,UserRole.scope_type,UserRole.scope_id).join(UserRole,UserRole.role_id==Role.id).where(UserRole.user_id==user.id,UserRole.tenant_id==user.tenant_id,Role.tenant_id==user.tenant_id)).all()
+    return [{"role":role,"scope_type":scope_type,"scope_id":scope_id} for role,scope_type,scope_id in rows]
+
+def has_role(db:Session,user:User,code:str)->bool:
+    return code in role_codes(db,user)

@@ -3,7 +3,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.auth import current_user,permission_codes
+from app.core.auth import current_user,permission_codes,has_role
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.identity import User,Role,UserRole
@@ -30,6 +30,9 @@ def list_guardians(student_id:UUID,user:User=Depends(current_user),db:Session=De
     require(db,user,"students.student.view")
     student=db.scalar(select(Student).where(Student.id==student_id,Student.tenant_id==user.tenant_id))
     if not student: raise HTTPException(404,"Student not found")
+    if has_role(db,user,"PARENT"):
+        own=db.scalar(select(StudentGuardian.id).join(Guardian,Guardian.id==StudentGuardian.guardian_id).where(StudentGuardian.tenant_id==user.tenant_id,StudentGuardian.student_id==student.id,Guardian.tenant_id==user.tenant_id,Guardian.user_id==user.id))
+        if not own: raise HTTPException(404,"Student not found")
     rows=db.execute(select(Guardian,StudentGuardian).join(StudentGuardian,StudentGuardian.guardian_id==Guardian.id).where(StudentGuardian.tenant_id==user.tenant_id,StudentGuardian.student_id==student.id)).all()
     return {"data":[{"guardian_id":str(g.id),"name":g.name,"phone":g.phone,"email":g.email,"relationship":link.relationship,"is_primary":link.is_primary,"user_id":None if not g.user_id else str(g.user_id)} for g,link in rows]}
 class GuardianUserLinkIn(BaseModel):user_id:UUID

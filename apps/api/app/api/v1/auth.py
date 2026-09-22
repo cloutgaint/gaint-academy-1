@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.db.session import get_db
 from app.models.identity import User, Session, AuditEvent, Tenant, now
 from app.core.security import verify_password, hash_password
-from app.core.auth import SESSION_COOKIE, current_user, new_session_token, permission_codes, token_hash
+from app.core.auth import SESSION_COOKIE, current_user, new_session_token, permission_codes, role_codes, role_scopes, token_hash
 from app.core.config import settings
 from app.core.email import send_password_reset_otp
 
@@ -132,7 +132,7 @@ def change_password(payload:ChangePasswordIn,request:Request,user:User=Depends(c
 
 @router.get("/me")
 def me(request:Request,user:User=Depends(current_user),db:DbSession=Depends(get_db)):
-    return {"data":{"user_id":str(user.id),"tenant_id":str(user.tenant_id),"email":user.email,"permissions":permission_codes(db,user)},"request_id":request.state.request_id}
+    return {"data":{"user_id":str(user.id),"tenant_id":str(user.tenant_id),"email":user.email,"roles":role_codes(db,user),"scopes":role_scopes(db,user),"permissions":permission_codes(db,user)},"request_id":request.state.request_id}
 
 @router.post("/logout")
 def logout(request:Request,response:Response,session_token:str|None=None,user:User=Depends(current_user),db:DbSession=Depends(get_db)):
