@@ -1,14 +1,16 @@
 "use client";
-import {useEffect,useState} from "react";
+import {FormEvent,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
 import {apiFetch} from "../../lib/api";
 export default function Settings(){
- const router=useRouter();const [me,setMe]=useState<any>(null);
+ const router=useRouter();const [me,setMe]=useState<any>(null);const [currentPassword,setCurrentPassword]=useState(""),[newPassword,setNewPassword]=useState(""),[confirm,setConfirm]=useState(""),[message,setMessage]=useState(""),[saving,setSaving]=useState(false);
  useEffect(()=>{apiFetch("/auth/me").then(x=>setMe(x.data)).catch(()=>router.replace("/login"))},[router]);
+ async function changePassword(e:FormEvent){e.preventDefault();setMessage("");if(newPassword!==confirm){setMessage("New passwords do not match.");return}setSaving(true);try{await apiFetch("/auth/change-password",{method:"POST",body:JSON.stringify({current_password:currentPassword,new_password:newPassword})});setCurrentPassword("");setNewPassword("");setConfirm("");setMessage("Password changed successfully. Other active sessions were revoked.");}catch(e){setMessage(e instanceof Error?e.message:"Password change failed.")}finally{setSaving(false)}}
  if(!me)return <main className="loading">Loading settings…</main>;
  return <main className="module-page"><header><div><p className="eyebrow">ADMINISTRATION</p><h1>Settings</h1><p className="muted">Account, tenant security and access configuration overview.</p></div><button className="secondary" onClick={()=>router.push("/dashboard")}>Dashboard</button></header>
  <section className="profile-grid"><article className="panel"><h2>Signed-in account</h2><dl><dt>Email</dt><dd>{me.email}</dd><dt>User ID</dt><dd>{me.user_id}</dd><dt>Tenant ID</dt><dd>{me.tenant_id}</dd></dl></article>
  <article className="panel"><h2>RBAC & Security</h2><p className="muted">Effective backend permissions for this session.</p><div className="permission-list">{me.permissions.map((p:string)=><span className="permission-chip" key={p}>{p}</span>)}</div></article></section>
- <section className="panel settings-note"><h2>Security controls</h2><p>Authorization is enforced by the API. Parent accounts are provisioned from Student 360 and linked to a guardian record. Production MFA, CSRF hardening and advanced resource scopes remain release-hardening items.</p></section>
+ <section className="panel"><h2>Change password</h2><form className="module-form" onSubmit={changePassword}><label>Current password<input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} required autoComplete="current-password"/></label><label>New password<input type="password" minLength={10} value={newPassword} onChange={e=>setNewPassword(e.target.value)} required autoComplete="new-password"/></label><label>Confirm new password<input type="password" minLength={10} value={confirm} onChange={e=>setConfirm(e.target.value)} required autoComplete="new-password"/></label>{message&&<p className={message.startsWith("Password changed")?"muted":"error"}>{message}</p>}<button disabled={saving}>{saving?"Updating…":"Change password"}</button></form></section>
+ <section className="panel settings-note"><h2>Security controls</h2><p>Authorization is enforced by the API. Password recovery uses expiring email OTPs with throttling and attempt limits. Parent accounts are provisioned from Student 360 and linked to a guardian record. Production MFA, CSRF hardening and advanced resource scopes remain release-hardening items.</p></section>
  </main>;
 }

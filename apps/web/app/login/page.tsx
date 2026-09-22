@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage(){
   const router=useRouter();
@@ -25,6 +26,7 @@ export default function LoginPage(){
     <label>Institution code<input value={institutionCode} onChange={e=>setInstitutionCode(e.target.value.toUpperCase())} required autoComplete="organization"/></label>
     <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></label>
     <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label>
+    <p className="auth-link"><Link href="/forgot-password">Forgot password?</Link></p>
     {error&&<p className="error">{error}</p>}<button disabled={loading}>{loading?"Signing in…":"Sign in"}</button>
     <p className="secure-note">Tenant-aware secure access • GAINT Academy</p>
   </form></main>;
