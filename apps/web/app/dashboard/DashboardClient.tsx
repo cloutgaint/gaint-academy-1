@@ -15,14 +15,15 @@ const modules=[
  ["Communication","/communication","Notices and notifications"],
  ["Reports","/reports","Institution reporting and summaries"],
  ["Campus Operations","/campus","Grievances, assets and integrations"],
- ["GAINT AI","/ai","Permission-aware Academy Copilot"]
+ ["GAINT AI","/ai","Permission-aware Academy Copilot"],
+ ["Settings","/settings","Account, RBAC and security overview"]
 ];
 export default function DashboardClient(){
  const router=useRouter(); const [me,setMe]=useState<Me|null>(null); const [s,setS]=useState<Summary|null>(null);
  useEffect(()=>{Promise.all([apiFetch("/auth/me"),apiFetch("/dashboard/summary")]).then(([m,d])=>{setMe(m.data);setS(d.data)}).catch(()=>router.replace("/login"));},[router]);
  if(!me||!s) return <main className="loading">Loading secure workspace…</main>;
  return <main className="dashboard-shell"><aside><div className="logo">GA</div><strong>GAINT Academy</strong><nav>
- <a className="active" href="/dashboard">Dashboard</a><a href="/academics">Academics</a><a href="/students">Students</a><a href="/staff">Staff</a><a href="/attendance">Attendance</a><a href="/learning">Learning</a><a href="/finance">Finance</a><a href="/communication">Communication</a><a href="/reports">Reports</a><a href="/campus">Campus Operations</a><a href="/ai">GAINT AI</a>
+ <a className="active" href="/dashboard">Dashboard</a><a href="/academics">Academics</a><a href="/students">Students</a><a href="/staff">Staff</a><a href="/attendance">Attendance</a><a href="/learning">Learning</a><a href="/finance">Finance</a><a href="/communication">Communication</a><a href="/reports">Reports</a><a href="/campus">Campus Operations</a><a href="/ai">GAINT AI</a><a href="/settings">Settings</a>
  </nav></aside>
  <section className="workspace"><header><div><p className="eyebrow">INSTITUTION ADMIN</p><h1>Dashboard</h1><p className="muted">{me.email}</p></div><div className="header-actions"><span className="status-pill">MVP v1.0 RC</span><LogoutButton/></div></header>
  <div className="welcome"><h2>Academy operations workspace</h2><p>Tenant-aware administration, academics, learning, finance, communication, campus operations and governed AI are available from one workspace.</p></div>
