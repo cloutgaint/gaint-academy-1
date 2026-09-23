@@ -17,5 +17,7 @@ class Settings(BaseSettings):
     smtp_from_email:str|None=None
     smtp_use_tls:bool=True
     password_reset_otp_minutes:int=10
+    login_max_attempts:int=5
+    login_window_seconds:int=900
     model_config=SettingsConfigDict(env_file=".env",extra="ignore")
 settings=Settings()

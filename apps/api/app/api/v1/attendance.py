@@ -4,7 +4,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.auth import current_user,permission_codes,has_role,teacher_section_ids,require_teacher_section
+from app.core.auth import current_user,permission_codes,has_role,teacher_section_ids,require_teacher_section,linked_student_ids,scoped_student_id
 from app.db.session import get_db
 from app.models.identity import User,AuditEvent
 from app.models.academics import Section,Enrollment,Student
@@ -25,6 +25,26 @@ def slots(section_id:UUID,u:User=Depends(current_user),db:Session=Depends(get_db
  require(db,u,"timetable.slot.view");require_teacher_section(db,u,section_id)
  rows=db.scalars(select(TimetableSlot).where(TimetableSlot.tenant_id==u.tenant_id,TimetableSlot.section_id==section_id)).all()
  return {"data":[{"id":str(x.id),"subject_name":x.subject_name,"weekday":x.weekday,"start_time":str(x.start_time),"end_time":str(x.end_time)} for x in rows]}
+
+@router.get("/attendance/records")
+def attendance_records(student_id:UUID|None=None,u:User=Depends(current_user),db:Session=Depends(get_db)):
+ require(db,u,"attendance.session.view")
+ allowed=None
+ if has_role(db,u,"PARENT"):allowed=linked_student_ids(db,u)
+ if has_role(db,u,"STUDENT"):
+  own=scoped_student_id(db,u);allowed=set() if not own else {own}
+ if allowed is not None:
+  if student_id and student_id not in allowed:raise HTTPException(404,"Student not found")
+  ids={student_id} if student_id else allowed
+ else:
+  ids={student_id} if student_id else None
+ q=select(AttendanceRecord,AttendanceSession).join(AttendanceSession,AttendanceSession.id==AttendanceRecord.session_id).where(AttendanceRecord.tenant_id==u.tenant_id,AttendanceSession.tenant_id==u.tenant_id,AttendanceSession.status=="SUBMITTED")
+ if ids is not None:
+  if not ids:return {"data":[]}
+  q=q.where(AttendanceRecord.student_id.in_(ids))
+ rows=db.execute(q.order_by(AttendanceSession.attendance_date.desc())).all()
+ return {"data":[{"student_id":str(r.student_id),"attendance_date":str(s.attendance_date),"status":r.status,"remark":r.remark} for r,s in rows]}
+
 class AttendanceIn(BaseModel): section_id:UUID;attendance_date:date
 @router.post("/attendance/sessions",status_code=201)
 def create_session(p:AttendanceIn,u:User=Depends(current_user),db:Session=Depends(get_db)):

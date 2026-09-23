@@ -3,9 +3,10 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.auth import current_user,permission_codes,has_role
+from app.core.auth import current_user,permission_codes,has_role,scoped_student_id,require_self_student
 from app.db.session import get_db
-from app.models.identity import User
+from app.core.security import hash_password
+from app.models.identity import User,Role,UserRole
 from app.models.people import Guardian,StudentGuardian
 from app.models.academics import Student,Enrollment,AcademicYear,AcademicClass,Section
 router=APIRouter(prefix="/students",tags=["students"])
@@ -22,6 +23,10 @@ def list_students(user:User=Depends(current_user),db:Session=Depends(get_db)):
     q=select(Student).where(Student.tenant_id==user.tenant_id)
     allowed=parent_student_ids(db,user)
     if allowed is not None: q=q.where(Student.id.in_(allowed))
+    if has_role(db,user,"STUDENT"):
+        own=scoped_student_id(db,user)
+        if not own:return {"data":[]}
+        q=q.where(Student.id==own)
     rows=db.scalars(q.order_by(Student.created_at.desc())).all()
     return {"data":[{"id":str(x.id),"admission_no":x.admission_no,"name":(x.first_name+" "+(x.last_name or "")).strip(),"email":x.email,"status":x.status} for x in rows]}
 @router.post("",status_code=201)
@@ -33,6 +38,7 @@ def student(student_id:UUID,user:User=Depends(current_user),db:Session=Depends(g
     q=select(Student).where(Student.id==student_id,Student.tenant_id==user.tenant_id)
     allowed=parent_student_ids(db,user)
     if allowed is not None: q=q.where(Student.id.in_(allowed))
+    require_self_student(db,user,student_id)
     x=db.scalar(q)
     if not x: raise HTTPException(404,"Student not found")
     enroll=db.scalar(select(Enrollment).where(Enrollment.student_id==x.id,Enrollment.tenant_id==user.tenant_id,Enrollment.status=="ACTIVE"))
@@ -46,3 +52,26 @@ def enroll(student_id:UUID,p:EnrollIn,user:User=Depends(current_user),db:Session
     sec=db.scalar(select(Section).where(Section.id==p.section_id,Section.tenant_id==user.tenant_id,Section.class_id==p.class_id))
     if not all([student,year,cls,sec]): raise HTTPException(404,"Enrollment resource not found")
     x=Enrollment(tenant_id=user.tenant_id,student_id=student_id,**p.model_dump()); db.add(x); db.commit(); db.refresh(x); return {"data":{"id":str(x.id),"status":x.status}}
+
+class StudentAccountIn(BaseModel):
+    email:EmailStr
+    password:str
+
+@router.post("/{student_id}/student-account",status_code=201)
+def create_student_account(student_id:UUID,p:StudentAccountIn,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    require(db,user,"users.user.create")
+    student=db.scalar(select(Student).where(Student.id==student_id,Student.tenant_id==user.tenant_id))
+    if not student:raise HTTPException(404,"Student not found")
+    email=p.email.lower()
+    if len(p.password)<10:raise HTTPException(422,"Password must be at least 10 characters")
+    if db.scalar(select(User).where(User.tenant_id==user.tenant_id,User.email==email)):raise HTTPException(409,"Email already exists")
+    existing=db.execute(select(UserRole).join(Role,Role.id==UserRole.role_id).where(UserRole.tenant_id==user.tenant_id,Role.tenant_id==user.tenant_id,Role.code=="STUDENT",UserRole.scope_type=="STUDENT",UserRole.scope_id==str(student.id))).first()
+    if existing:raise HTTPException(409,"Student already has a user account")
+    role=db.scalar(select(Role).where(Role.tenant_id==user.tenant_id,Role.code=="STUDENT"))
+    if not role:
+        role=Role(tenant_id=user.tenant_id,code="STUDENT",name="Student");db.add(role);db.flush()
+    target=User(tenant_id=user.tenant_id,email=email,password_hash=hash_password(p.password));db.add(target);db.flush()
+    db.add(UserRole(tenant_id=user.tenant_id,user_id=target.id,role_id=role.id,scope_type="STUDENT",scope_id=str(student.id)))
+    if not student.email:student.email=email
+    db.commit()
+    return {"data":{"user_id":str(target.id),"student_id":str(student.id),"email":target.email,"role":"STUDENT"}}

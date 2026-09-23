@@ -50,6 +50,12 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://gaint:ci-password@localhost:5432/gaint_academy
         run: alembic current
+      - name: DB-backed tenant and IDOR tests
+        env:
+          DATABASE_URL: postgresql+psycopg://gaint:ci-password@localhost:5432/gaint_academy
+          RUN_DB_INTEGRATION: "1"
+          PYTHONPATH: .
+        run: python -m pytest tests/integration/test_tenant_idor_db.py -q
   web:
     runs-on: ubuntu-latest
     defaults:

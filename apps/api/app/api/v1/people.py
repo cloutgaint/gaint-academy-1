@@ -73,3 +73,23 @@ def assign(staff_id:UUID,p:AssignIn,user:User=Depends(current_user),db:Session=D
     staff=db.scalar(select(Staff).where(Staff.id==staff_id,Staff.tenant_id==user.tenant_id));section=db.scalar(select(Section).where(Section.id==p.section_id,Section.tenant_id==user.tenant_id))
     if not staff or not section: raise HTTPException(404,"Assignment resource not found")
     x=TeacherAssignment(tenant_id=user.tenant_id,staff_id=staff.id,**p.model_dump());db.add(x);db.commit();db.refresh(x);return {"data":{"id":str(x.id)}}
+
+class TeacherAccountIn(BaseModel): email:EmailStr; password:str
+@router.post("/staff/{staff_id}/teacher-account",status_code=201)
+def create_teacher_account(staff_id:UUID,p:TeacherAccountIn,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    require(db,user,"users.user.create")
+    staff=db.scalar(select(Staff).where(Staff.id==staff_id,Staff.tenant_id==user.tenant_id,Staff.status=="ACTIVE"))
+    if not staff:raise HTTPException(404,"Staff not found")
+    existing=db.execute(select(UserRole).join(Role,Role.id==UserRole.role_id).where(UserRole.tenant_id==user.tenant_id,Role.tenant_id==user.tenant_id,Role.code=="TEACHER",UserRole.scope_type=="STAFF",UserRole.scope_id==str(staff.id))).first()
+    if existing:raise HTTPException(409,"Staff already has a teacher account")
+    email=p.email.lower()
+    if len(p.password)<10:raise HTTPException(422,"Password must be at least 10 characters")
+    if db.scalar(select(User).where(User.tenant_id==user.tenant_id,User.email==email)):raise HTTPException(409,"Email already exists")
+    role=db.scalar(select(Role).where(Role.tenant_id==user.tenant_id,Role.code=="TEACHER"))
+    if not role:
+        role=Role(tenant_id=user.tenant_id,code="TEACHER",name="Teacher");db.add(role);db.flush()
+    target=User(tenant_id=user.tenant_id,email=email,password_hash=hash_password(p.password));db.add(target);db.flush()
+    db.add(UserRole(tenant_id=user.tenant_id,user_id=target.id,role_id=role.id,scope_type="STAFF",scope_id=str(staff.id)))
+    if not staff.email:staff.email=email
+    db.commit()
+    return {"data":{"user_id":str(target.id),"staff_id":str(staff.id),"email":target.email,"role":"TEACHER"}}

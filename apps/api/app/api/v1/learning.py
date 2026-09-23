@@ -4,7 +4,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.auth import current_user,permission_codes,has_role,linked_student_ids,require_linked_student,teacher_section_ids,require_teacher_section
+from app.core.auth import current_user,permission_codes,has_role,linked_student_ids,require_linked_student,teacher_section_ids,require_teacher_section,student_section_ids,require_self_student
 from app.db.session import get_db
 from app.models.identity import User,AuditEvent
 from app.models.academics import Section,Enrollment
@@ -25,6 +25,10 @@ def courses(u:User=Depends(current_user),db:Session=Depends(get_db)):
  q=select(Course).where(Course.tenant_id==u.tenant_id)
  if has_role(db,u,"TEACHER"):
   sections=teacher_section_ids(db,u)
+  if not sections:return {"data":[]}
+  q=q.where(Course.section_id.in_(sections))
+ if has_role(db,u,"STUDENT"):
+  sections=student_section_ids(db,u)
   if not sections:return {"data":[]}
   q=q.where(Course.section_id.in_(sections))
  if has_role(db,u,"PARENT"):
@@ -66,7 +70,7 @@ def marks(assessment_id:UUID,rows:list[MarkIn],u:User=Depends(current_user),db:S
 class SubmissionIn(BaseModel):student_id:UUID;content:str
 @router.post("/assignments/{assignment_id}/submissions",status_code=201)
 def submit_assignment(assignment_id:UUID,p:SubmissionIn,u:User=Depends(current_user),db:Session=Depends(get_db)):
- req(db,u,"learning.submission.create");require_linked_student(db,u,p.student_id);a=db.scalar(select(Assignment).where(Assignment.id==assignment_id,Assignment.tenant_id==u.tenant_id));c=None if not a else db.scalar(select(Course).where(Course.id==a.course_id,Course.tenant_id==u.tenant_id))
+ req(db,u,"learning.submission.create");require_linked_student(db,u,p.student_id);require_self_student(db,u,p.student_id);a=db.scalar(select(Assignment).where(Assignment.id==assignment_id,Assignment.tenant_id==u.tenant_id));c=None if not a else db.scalar(select(Course).where(Course.id==a.course_id,Course.tenant_id==u.tenant_id))
  if not a or not c:raise HTTPException(404,"Assignment not found")
  enrolled=db.scalar(select(Enrollment).where(Enrollment.tenant_id==u.tenant_id,Enrollment.section_id==c.section_id,Enrollment.student_id==p.student_id,Enrollment.status=="ACTIVE"))
  if not enrolled:raise HTTPException(422,"Student is not actively enrolled in the course section")

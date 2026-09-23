@@ -81,3 +81,29 @@ def teacher_section_ids(db:Session,user:User)->set:
 def require_teacher_section(db:Session,user:User,section_id)->None:
     if has_role(db,user,"TEACHER") and section_id not in teacher_section_ids(db,user):
         raise HTTPException(status_code=404,detail="Section not found")
+
+
+def scoped_student_id(db:Session,user:User):
+    for scope in role_scopes(db,user):
+        if scope["role"]=="STUDENT" and scope["scope_type"]=="STUDENT" and scope["scope_id"]:
+            try:
+                from uuid import UUID
+                return UUID(scope["scope_id"])
+            except ValueError:
+                return None
+    return None
+
+def require_self_student(db:Session,user:User,student_id)->None:
+    if has_role(db,user,"STUDENT") and scoped_student_id(db,user)!=student_id:
+        raise HTTPException(status_code=404,detail="Student not found")
+
+def student_section_ids(db:Session,user:User)->set:
+    student_id=scoped_student_id(db,user)
+    if not student_id: return set()
+    from app.models.academics import Enrollment
+    rows=db.scalars(select(Enrollment.section_id).where(
+        Enrollment.tenant_id==user.tenant_id,
+        Enrollment.student_id==student_id,
+        Enrollment.status=="ACTIVE",
+    )).all()
+    return set(rows)

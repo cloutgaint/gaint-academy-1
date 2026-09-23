@@ -2,7 +2,7 @@
 
 AI-powered unified education and campus management platform.
 
-## Stage 0 Foundation
+## v1.1 Release Candidate
 
 Stack:
 - Next.js + TypeScript
@@ -64,4 +64,12 @@ No real administrator password or production secret is committed. Sessions use r
 
 ## Development sequence
 
-Stage 0 Foundation → Vertical Slice 1 → Vertical Slice 2 → Domain Modules → QA/UAT → Pilot → Production.
+Foundation → Core Modules → Authorization Hardening → Security/UX Stabilization → v1.1 UAT → Pilot → Production.
+
+
+## v1.1 release documents
+
+- UAT gate: `docs/UAT_CHECKLIST.md`
+- Release candidate notes: `docs/RELEASE_NOTES_v1.1_RC.md`
+
+The current release candidate is for local/UAT validation only. Production deployment requires the full P0 UAT gate to pass.

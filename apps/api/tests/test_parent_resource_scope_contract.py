@@ -21,7 +21,8 @@ def test_parent_learning_courses_are_linked_enrollment_scoped():
     assert "Course.section_id.in_(section_ids)" in s
     assert "require_linked_student(db,u,p.student_id)" in s
 
-def test_parent_seed_allows_scoped_payment_flow():
+def test_parent_seed_allows_scoped_payment_initiation_only():
     s=read("app/scripts/seed.py")
     line=next(x for x in s.splitlines() if x.startswith("PARENT_PERMISSIONS="))
-    assert '"finance.payment.record"' in line
+    assert '"finance.payment.initiate"' in line
+    assert '"finance.payment.record"' not in line
