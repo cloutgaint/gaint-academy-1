@@ -37,3 +37,21 @@ def role_scopes(db:Session,user:User)->list[dict[str,str|None]]:
 
 def has_role(db:Session,user:User,code:str)->bool:
     return code in role_codes(db,user)
+
+
+def linked_student_ids(db:Session,user:User)->set:
+    from app.models.people import Guardian, StudentGuardian
+    rows=db.execute(
+        select(StudentGuardian.student_id)
+        .join(Guardian,Guardian.id==StudentGuardian.guardian_id)
+        .where(
+            StudentGuardian.tenant_id==user.tenant_id,
+            Guardian.tenant_id==user.tenant_id,
+            Guardian.user_id==user.id,
+        )
+    ).scalars().all()
+    return set(rows)
+
+def require_linked_student(db:Session,user:User,student_id)->None:
+    if has_role(db,user,"PARENT") and student_id not in linked_student_ids(db,user):
+        raise HTTPException(status_code=404,detail="Student not found")

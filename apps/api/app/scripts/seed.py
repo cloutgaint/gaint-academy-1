@@ -3,7 +3,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.identity import Tenant, Campus, User, Role, Permission, UserRole, RolePermission
-PARENT_PERMISSIONS=["platform.dashboard.view","students.student.view","attendance.session.view","learning.course.view","communication.notice.view","finance.plan.view","reports.summary.view"]
+PARENT_PERMISSIONS=["platform.dashboard.view","students.student.view","attendance.session.view","learning.course.view","communication.notice.view","finance.plan.view","finance.payment.record","reports.summary.view"]
 PERMISSIONS=["platform.dashboard.view","users.user.view","users.user.create","students.student.view","students.student.create","staff.staff.view","staff.staff.create","timetable.slot.manage","timetable.slot.view","attendance.session.create","attendance.record.mark","attendance.session.submit","learning.course.manage","learning.course.view","learning.submission.create","learning.assignment.manage","assessment.manage","assessment.marks.manage","assessment.publish","finance.plan.view","finance.plan.manage","finance.invoice.create","finance.payment.record","communication.notice.manage","communication.notice.view","communication.notice.publish","reports.summary.view","integrations.view","integrations.manage","grievances.manage","assets.manage","ai.use","ai.action.propose","ai.action.confirm","academics.setup.admin","audit.event.view"]
 def run():
     if not settings.seed_admin_password: raise RuntimeError("SEED_ADMIN_PASSWORD must be set.")

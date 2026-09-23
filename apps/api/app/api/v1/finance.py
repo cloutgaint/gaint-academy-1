@@ -5,7 +5,7 @@ from fastapi import APIRouter,Depends,HTTPException,Header,Request
 from pydantic import BaseModel,Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.auth import current_user,permission_codes
+from app.core.auth import current_user,permission_codes,has_role,linked_student_ids,require_linked_student
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.identity import User,AuditEvent
@@ -20,7 +20,12 @@ def plan(p:FeePlanIn,u:User=Depends(current_user),db:Session=Depends(get_db)):
  req(db,u,"finance.plan.manage");x=FeePlan(tenant_id=u.tenant_id,**p.model_dump());db.add(x);db.commit();db.refresh(x);return {"data":{"id":str(x.id),"name":x.name,"amount":str(x.amount)}}
 @router.get("/fee-plans")
 def plans(u:User=Depends(current_user),db:Session=Depends(get_db)):
- req(db,u,"finance.plan.view");rows=db.scalars(select(FeePlan).where(FeePlan.tenant_id==u.tenant_id)).all();return {"data":[{"id":str(x.id),"name":x.name,"amount":str(x.amount),"status":x.status} for x in rows]}
+ req(db,u,"finance.plan.view")
+ if has_role(db,u,"PARENT"):
+  ids=linked_student_ids(db,u)
+  rows=db.scalars(select(Invoice).where(Invoice.tenant_id==u.tenant_id,Invoice.student_id.in_(ids))).all() if ids else []
+  return {"data":[{"id":str(x.id),"invoice_no":x.invoice_no,"amount":str(x.amount),"paid_amount":str(x.paid_amount),"status":x.status,"student_id":str(x.student_id)} for x in rows]}
+ rows=db.scalars(select(FeePlan).where(FeePlan.tenant_id==u.tenant_id)).all();return {"data":[{"id":str(x.id),"name":x.name,"amount":str(x.amount),"status":x.status} for x in rows]}
 class InvoiceIn(BaseModel):student_id:UUID;fee_plan_id:UUID;invoice_no:str
 @router.post("/invoices",status_code=201)
 def invoice(p:InvoiceIn,u:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -31,6 +36,7 @@ class PaymentIn(BaseModel):invoice_id:UUID;reference:str;amount:Decimal=Field(gt
 @router.post("/payments",status_code=201)
 def payment(p:PaymentIn,u:User=Depends(current_user),db:Session=Depends(get_db)):
  req(db,u,"finance.payment.record");inv=db.scalar(select(Invoice).where(Invoice.id==p.invoice_id,Invoice.tenant_id==u.tenant_id))
+ if inv: require_linked_student(db,u,inv.student_id)
  if not inv:raise HTTPException(404,"Invoice not found")
  due=inv.amount-inv.paid_amount
  if p.amount>due:raise HTTPException(422,"Payment exceeds invoice balance")
