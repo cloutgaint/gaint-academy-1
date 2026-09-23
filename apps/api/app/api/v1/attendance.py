@@ -4,7 +4,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.core.auth import current_user,permission_codes
+from app.core.auth import current_user,permission_codes,has_role,teacher_section_ids,require_teacher_section
 from app.db.session import get_db
 from app.models.identity import User,AuditEvent
 from app.models.academics import Section,Enrollment,Student
@@ -22,13 +22,13 @@ def slot(p:SlotIn,u:User=Depends(current_user),db:Session=Depends(get_db)):
  x=TimetableSlot(tenant_id=u.tenant_id,**p.model_dump());db.add(x);db.commit();db.refresh(x);return {"data":{"id":str(x.id)}}
 @router.get("/timetable")
 def slots(section_id:UUID,u:User=Depends(current_user),db:Session=Depends(get_db)):
- require(db,u,"timetable.slot.view")
+ require(db,u,"timetable.slot.view");require_teacher_section(db,u,section_id)
  rows=db.scalars(select(TimetableSlot).where(TimetableSlot.tenant_id==u.tenant_id,TimetableSlot.section_id==section_id)).all()
  return {"data":[{"id":str(x.id),"subject_name":x.subject_name,"weekday":x.weekday,"start_time":str(x.start_time),"end_time":str(x.end_time)} for x in rows]}
 class AttendanceIn(BaseModel): section_id:UUID;attendance_date:date
 @router.post("/attendance/sessions",status_code=201)
 def create_session(p:AttendanceIn,u:User=Depends(current_user),db:Session=Depends(get_db)):
- require(db,u,"attendance.session.create");sec=db.scalar(select(Section).where(Section.id==p.section_id,Section.tenant_id==u.tenant_id))
+ require(db,u,"attendance.session.create");require_teacher_section(db,u,p.section_id);sec=db.scalar(select(Section).where(Section.id==p.section_id,Section.tenant_id==u.tenant_id))
  if not sec: raise HTTPException(404,"Section not found")
  x=AttendanceSession(tenant_id=u.tenant_id,created_by=u.id,**p.model_dump());db.add(x);db.commit();db.refresh(x);return {"data":{"id":str(x.id),"status":x.status}}
 class RecordIn(BaseModel): student_id:UUID;status:str;remark:str|None=None
@@ -36,6 +36,7 @@ class RecordIn(BaseModel): student_id:UUID;status:str;remark:str|None=None
 def mark(session_id:UUID,records:list[RecordIn],u:User=Depends(current_user),db:Session=Depends(get_db)):
  require(db,u,"attendance.record.mark");s=db.scalar(select(AttendanceSession).where(AttendanceSession.id==session_id,AttendanceSession.tenant_id==u.tenant_id,AttendanceSession.status=="DRAFT"))
  if not s: raise HTTPException(404,"Attendance session not found")
+ require_teacher_section(db,u,s.section_id)
  valid={"PRESENT","ABSENT","LATE","EXCUSED"}
  for r in records:
   if r.status not in valid: raise HTTPException(422,"Invalid attendance status")
@@ -49,6 +50,7 @@ def mark(session_id:UUID,records:list[RecordIn],u:User=Depends(current_user),db:
 def submit(session_id:UUID,u:User=Depends(current_user),db:Session=Depends(get_db)):
  require(db,u,"attendance.session.submit");s=db.scalar(select(AttendanceSession).where(AttendanceSession.id==session_id,AttendanceSession.tenant_id==u.tenant_id))
  if not s:raise HTTPException(404,"Attendance session not found")
+ require_teacher_section(db,u,s.section_id)
  if s.status!="DRAFT":raise HTTPException(409,"Attendance session is not in DRAFT state")
  enrolled_count=len(db.scalars(select(Enrollment).where(Enrollment.tenant_id==u.tenant_id,Enrollment.section_id==s.section_id,Enrollment.status=="ACTIVE")).all())
  marked_count=len(db.scalars(select(AttendanceRecord).where(AttendanceRecord.tenant_id==u.tenant_id,AttendanceRecord.session_id==s.id)).all())
